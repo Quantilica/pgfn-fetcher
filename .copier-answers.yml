@@ -1,0 +1,12 @@
+_commit: v0.1.0
+_src_path: /home/dk/code/Quantilica/fetcher-template
+author_email: daniel@dkko.me
+author_name: Komesu, D.K.
+description: Coletor e conversor Lake Hive de dados abertos da dívida ativa da PGFN
+domain: fiscal
+has_lake: true
+package_name: pgfn-fetcher
+package_slug: pgfn_fetcher
+protocol: http
+source_id: pgfn
+source_name: Procuradoria-Geral da Fazenda Nacional — Dívida Ativa da União
