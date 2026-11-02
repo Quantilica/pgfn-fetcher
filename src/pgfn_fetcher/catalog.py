@@ -20,8 +20,17 @@ __all__ = [
 def _build_quarterly_entries_for_dataset(
     ds_id: str, meta: dict[str, Any]
 ) -> list[DatasetEntry]:
-    """Build quarterly dataset entries for a PGFN dataset."""
-    current_year = dt.date.today().year
+    """Build quarterly dataset entries for a PGFN dataset.
+
+    A PGFN só publica trimestre **fechado**: o trimestre corrente ainda não
+    tem arquivo, então o catálogo para no último trimestre concluído.
+    """
+    today = dt.date.today()
+    quarter = (today.month - 1) // 3 + 1
+    if quarter == 1:
+        last_year, last_quarter = today.year - 1, 4
+    else:
+        last_year, last_quarter = today.year, quarter - 1
     kind = meta["file_kind"]
     url_tmpl = (
         f"{PGFN_BASE_URL}/{{year}}_trimestre_{{quarter}}/Dados_abertos_{kind}.zip"
@@ -33,7 +42,8 @@ def _build_quarterly_entries_for_dataset(
         name_template=name_tmpl,
         url_template=url_tmpl,
         start_year=PGFN_START_YEAR,
-        end_year=current_year,
+        end_year=last_year,
+        end_quarter=last_quarter,
         ext="zip",
     )
 

@@ -96,13 +96,21 @@ def quarterly_datasets(
     url_template: str,
     start_year: int,
     end_year: int | None = None,
+    end_quarter: int | None = None,
     ext: str = "zip",
 ) -> list[DatasetEntry]:
-    """Construct quarterly dataset entries."""
+    """Construct quarterly dataset entries.
+
+    ``end_quarter`` limita os trimestres do ano final (útil para fontes que só
+    publicam trimestre fechado, como a PGFN).
+    """
     end = end_year or dt.date.today().year
     entries: list[DatasetEntry] = []
     for y in range(start_year, end + 1):
-        for q in range(1, 5):
+        max_q = 4
+        if end_quarter is not None and y == end:
+            max_q = end_quarter
+        for q in range(1, max_q + 1):
             entries.append(
                 DatasetEntry(
                     id=f"{base_id}_{y}-T{q}",
