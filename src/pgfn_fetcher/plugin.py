@@ -32,7 +32,7 @@ fetcher = FetcherApp(
     list_datasets=list_datasets,
     path_builder=path_builder,
     default_output=Path("/data/pgfn"),
-    freshness_policy=FreshnessPolicy.REMOTE_ONLY,
+    freshness_policy=FreshnessPolicy.HEAD_FALLBACK_GET,
 )
 
 
