@@ -100,3 +100,107 @@ def test_convert_pgfn_datasets(tmp_path: Path) -> None:
     (part_fgts,) = list((ds_fgts / "ano=2024" / "trimestre=3").glob("*.parquet"))
     df_fgts = pl.read_parquet(part_fgts)
     assert df_fgts["regiao_pgfn"][0] == "NA"
+
+
+def _lake_rows(dataset_dir: Path) -> pl.DataFrame:
+    parts = sorted(dataset_dir.rglob("*.parquet"))
+    return pl.concat([pl.read_parquet(p) for p in parts], how="diagonal")
+
+
+def _multi_member_zip(raw_dir: Path) -> Path:
+    header = "CPF_CNPJ;NOME_DEVEDOR;RECEITA_PRINCIPAL;VALOR_CONSOLIDADO\n"
+    zip_path = raw_dir / "sida_2024-T3@20261101.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for regiao in (1, 2, 3):
+            csv = (
+                header
+                + f"0234567800019{regiao};DEVEDOR AÇÃO {regiao};IRPJ;10,00\n"
+                + f"***.456.789-**;PESSOA {regiao};MULTA;20,50\n"
+            )
+            zf.writestr(f"arquivo_lai_SIDA_{regiao}_202409.csv", csv.encode("cp1252"))
+    return zip_path
+
+
+def test_zip_multi_membro_preserva_todas_as_linhas(tmp_path: Path) -> None:
+    """Regressao A1: membros do mesmo ZIP nao podem se pular entre si."""
+    raw_dir = tmp_path / "raw" / "sida"
+    raw_dir.mkdir(parents=True)
+    _multi_member_zip(raw_dir)
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert not res.errors
+    assert res.converted == 3
+    assert res.skipped == 0
+
+    ds = lake_dir / "pgfn" / "sida"
+    assert not check_dataset(ds)
+    df = _lake_rows(ds)
+    assert df.height == 6
+    assert sorted(df["regiao_pgfn"].unique().to_list()) == ["1", "2", "3"]
+    # texto como texto: o zero a esquerda do CNPJ sobrevive e o cp1252 e decodificado
+    assert "02345678000191" in df["cpf_cnpj"].to_list()
+    assert "02345678" in df["cnpj_basico"].to_list()
+    assert "DEVEDOR AÇÃO 2" in df["nome_devedor"].to_list()
+    assert "�" not in "".join(df["nome_devedor"].to_list())
+    assert df["valor_consolidado"].sum() == 3 * 30.5
+
+    # idempotente: segunda rodada pula os 3 membros e nao reconta como convertido
+    res2 = converter.convert(tmp_path / "raw", lake_dir)
+    assert not res2.errors
+    assert (res2.converted, res2.skipped) == (0, 3)
+    assert _lake_rows(ds).height == 6
+
+
+def test_membro_com_byte_invalido_vira_erro_e_nao_substitui(tmp_path: Path) -> None:
+    """Previdenciario e UTF-8: byte invalido e erro contado, nunca U+FFFD."""
+    raw_dir = tmp_path / "raw" / "previdenciario"
+    raw_dir.mkdir(parents=True)
+    ok = "CPF_CNPJ;NOME_DEVEDOR;VALOR_CONSOLIDADO\n98765432000188;EMPRESA;1,00\n"
+    ruim = b"CPF_CNPJ;NOME_DEVEDOR;VALOR_CONSOLIDADO\n98765432000189;A\xc7\xc3O;1,00\n"
+    with zipfile.ZipFile(raw_dir / "previdenciario_2024-T3@20261101.zip", "w") as zf:
+        zf.writestr("arquivo_lai_PREV_1_202409.csv", ok.encode("utf-8"))
+        zf.writestr("arquivo_lai_PREV_2_202409.csv", ruim)
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert res.converted == 1
+    assert len(res.errors) == 1
+    assert "PREV_2" in res.errors[0]
+    df = _lake_rows(lake_dir / "pgfn" / "previdenciario")
+    assert df.height == 1
+    assert df["regiao_pgfn"].to_list() == ["1"]
+
+
+def test_leitura_nao_carrega_o_membro_inteiro(tmp_path: Path, monkeypatch) -> None:
+    """O membro e lido em blocos (zf.open), nunca com ZipFile.read."""
+
+    def _proibido(self, *args, **kwargs):
+        raise AssertionError("ZipFile.read carrega o membro inteiro na memoria")
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", _proibido)
+    raw_dir = tmp_path / "raw" / "sida"
+    raw_dir.mkdir(parents=True)
+    _multi_member_zip(raw_dir)
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert not res.errors
+    assert res.converted == 3
+
+
+def test_periodo_nao_inferido_e_erro_e_nao_2020_t1(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw" / "sida"
+    raw_dir.mkdir(parents=True)
+    with zipfile.ZipFile(raw_dir / "sida_sem_periodo@20261101.zip", "w") as zf:
+        zf.writestr("arquivo_lai_SIDA_1_x.csv", b"CPF_CNPJ;VALOR_CONSOLIDADO\n1;2\n")
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert res.converted == 0
+    assert len(res.errors) == 1
+    assert not list(lake_dir.rglob("*.parquet"))

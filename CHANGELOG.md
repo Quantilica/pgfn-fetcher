@@ -8,6 +8,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ## [Não lançado]
 
 ### Corrigido
+- Lake: cada membro de um ZIP vira um arquivo de origem próprio (chave composta
+  `zip__membro`). Antes, só o primeiro membro chegava ao lake: o `LakeWriter` tomava os
+  seguintes por já convertidos (mesmo `src`/sha256/partição).
+- Lake: leitura membro a membro em streaming (sem `ZipFile.read` do membro inteiro) e
+  decodificação estrita (`cp1252` para `sida`/`fgts`, `utf-8` para `previdenciario`),
+  sem `errors="replace"`: byte inválido vira erro contado. Colunas lidas como texto
+  (CNPJ com zero à esquerda não vira inteiro). Período não inferido do nome é erro, não
+  mais `2020-T1`. `skipped` passa a contar os membros já convertidos.
 - O catálogo para no último trimestre **fechado**: trimestres futuros (ex.: `2026-T4`
   antes da publicação) deixavam de ser agendados e de gerar 404 diário.
 
