@@ -15,6 +15,12 @@ from .constants import PGFN_BASE_URL
 logger = get_logger(__name__)
 
 
+def parse_zip_links(html: str) -> list[str]:
+    """Extrai os nomes de arquivo ``.zip`` dos links de uma página autoindex."""
+    names = re.findall(r'href="([^"/?#]+\.zip)"', html, flags=re.IGNORECASE)
+    return sorted(set(names))
+
+
 class PgfnClient:
     """Client for downloading PGFN open data ZIP files."""
 
@@ -39,6 +45,15 @@ class PgfnClient:
         except Exception as exc:
             self.logger.warning("Erro ao listar autoindex PGFN: %s", exc)
             return []
+
+    def list_trimester_files(self, trimester: str) -> list[str]:
+        """Lista os ``.zip`` realmente publicados em um diretório de trimestre.
+
+        Levanta a exceção do cliente HTTP se a listagem falhar: quem chama decide
+        entre o fallback e o erro contado.
+        """
+        resp = self.client.get(f"{self.base_url}/{trimester}/")
+        return parse_zip_links(resp.text)
 
     def download_file(
         self,
