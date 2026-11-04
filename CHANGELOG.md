@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não lançado]
 
+### Adicionado
+- Catálogo dirigido pela listagem real: `catalog.discover_entries` usa
+  `PgfnClient.discover_trimesters` e a listagem de cada trimestre para achar os nomes
+  reais (`Nao_Previdenciariozip.zip` em 2022-T4, `Sistema_SIDA.zip` em 2026-T3).
+  Listagem de trimestre que falha usa o nome fixo (fallback); arquivo esperado ausente
+  não vira entrada (sem 404 diário) e é contado em `DiscoveryReport.missing`.
+  `PGFN_DISCOVER=0` desliga a descoberta (testes offline).
+
 ### Corrigido
 - Política de frescor volta a F2 (`HEAD_FALLBACK_GET`): `REMOTE_ONLY` (F3, para fontes sem validadores) causava re-download diário de fontes com Last-Modified/ETag, porque descartava o Last-Modified e o nome do arquivo caía em `@hoje`.
 - Lake: cada membro de um ZIP vira um arquivo de origem próprio (chave composta
