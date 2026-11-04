@@ -1,5 +1,7 @@
 """Tests for pgfn-fetcher Typer plugin."""
 
+import re
+
 from typer.testing import CliRunner
 
 from pgfn_fetcher.plugin import app
@@ -20,4 +22,4 @@ def test_cli_convert_help() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["convert", "--help"])
     assert result.exit_code == 0
-    assert "--lake" in result.output
+    assert "--lake" in re.sub(r"\x1b\[[0-9;]*m", "", result.output)
