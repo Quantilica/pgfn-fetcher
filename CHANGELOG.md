@@ -16,6 +16,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   `PGFN_DISCOVER=0` desliga a descoberta (testes offline).
 
 ### Corrigido
+- Lake `sida`: o `Dados_abertos_Sistema_SIDA.zip` de 2026-T3 (sondado por HEAD/Range: 6 membros `arquivo_lai_SIDA_<n>_202609.csv`, cp1252, 13 colunas) traz `CPF_CNPJ` com pontuacao (`84.461.748/0001-81`) e valores com ponto decimal; `cnpj_basico` exigia 14 caracteres e ficava nulo para todos. Agora extrai os 14 digitos. Reconverter `sida` 2026-T3 (e qualquer trimestre com CNPJ formatado) com `--force`.
 - Política de frescor volta a F2 (`HEAD_FALLBACK_GET`): `REMOTE_ONLY` (F3, para fontes sem validadores) causava re-download diário de fontes com Last-Modified/ETag, porque descartava o Last-Modified e o nome do arquivo caía em `@hoje`.
 - Lake: cada membro de um ZIP vira um arquivo de origem próprio (chave composta
   `zip__membro`). Antes, só o primeiro membro chegava ao lake: o `LakeWriter` tomava os

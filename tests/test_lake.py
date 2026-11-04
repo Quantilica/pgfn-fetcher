@@ -204,3 +204,47 @@ def test_periodo_nao_inferido_e_erro_e_nao_2020_t1(tmp_path: Path) -> None:
     assert res.converted == 0
     assert len(res.errors) == 1
     assert not list(lake_dir.rglob("*.parquet"))
+
+
+def test_sida_2026_t3_cnpj_formatado_e_valor_com_ponto(tmp_path: Path) -> None:
+    """Layout real do Dados_abertos_Sistema_SIDA.zip (2026-T3, sondado por Range):
+    13 colunas, CPF_CNPJ com pontuacao, CPF mascarado, valor com ponto decimal,
+    membros arquivo_lai_SIDA_<n>_202609.csv em cp1252."""
+    header = (
+        "CPF_CNPJ;TIPO_PESSOA;TIPO_DEVEDOR;NOME_DEVEDOR;UF_DEVEDOR;"
+        "UNIDADE_RESPONSAVEL;NUMERO_INSCRICAO;TIPO_SITUACAO_INSCRICAO;"
+        "SITUACAO_INSCRICAO;RECEITA_PRINCIPAL;DATA_INSCRICAO;INDICADOR_AJUIZADO;"
+        "VALOR_CONSOLIDADO\n"
+    )
+    pf = (
+        "XXX735.623XX;Pessoa física;PRINCIPAL;JOSE DA SILVA;AC;ACRE;1060400004576;"
+        "Em cobrança;ATIVA AJUIZADA;DIV.ATIVA-CPMF;26/01/2004;SIM;3193.82\n"
+    )
+    pj = (
+        "84.461.748/0001-81;Pessoa jurídica;PRINCIPAL;ACBR LTDA;SP;AMAZONAS;"
+        "2179900094488;Em cobrança;ATIVA AJUIZADA;Receita da dívida ativa - PIS;"
+        "30/11/1999;SIM;137954.52\n"
+    )
+    raw_dir = tmp_path / "raw" / "sida"
+    raw_dir.mkdir(parents=True)
+    with zipfile.ZipFile(raw_dir / "sida_2026-T3@20261021.zip", "w") as zf:
+        for n in (1, 2):
+            zf.writestr(
+                f"arquivo_lai_SIDA_{n}_202609.csv", (header + pf + pj).encode("cp1252")
+            )
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert not res.errors
+    assert res.converted == 2
+    df = _lake_rows(lake_dir / "pgfn" / "sida")
+    assert df.height == 4
+    pjs = df.filter(pl.col("cpf_cnpj") == "84.461.748/0001-81")
+    assert pjs["cnpj_basico"].to_list() == ["84461748"] * 2
+    assert (
+        df.filter(pl.col("tipo_pessoa") == "Pessoa física")["cnpj_basico"].null_count()
+        == 2
+    )
+    assert abs(df["valor_consolidado"].sum() - 2 * (3193.82 + 137954.52)) < 1e-6
+    assert "Receita da dívida ativa - PIS" in df["receita_principal"].to_list()

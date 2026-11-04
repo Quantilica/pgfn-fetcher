@@ -167,11 +167,14 @@ def _member_frame(
 
     lf = lf.with_columns(pl.lit(_extract_region(member_name)).alias("regiao_pgfn"))
 
-    # CNPJ basico para pessoas juridicas (14 digitos)
+    # CNPJ basico para pessoas juridicas: 14 digitos depois de tirar a pontuacao.
+    # O SIDA de 2026-T3 traz "84.461.748/0001-81"; trimestres antigos, so digitos.
+    # CPF mascarado ("XXX735.623XX") tem 6 digitos e fica sem cnpj_basico.
     if "cpf_cnpj" in names:
+        digitos = pl.col("cpf_cnpj").str.replace_all(r"\D", "")
         lf = lf.with_columns(
-            pl.when(pl.col("cpf_cnpj").str.len_chars() == 14)
-            .then(pl.col("cpf_cnpj").str.slice(0, 8))
+            pl.when(digitos.str.len_chars() == 14)
+            .then(digitos.str.slice(0, 8))
             .otherwise(None)
             .alias("cnpj_basico")
         )
