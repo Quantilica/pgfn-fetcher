@@ -47,7 +47,7 @@ def convert(
     try:
         from pgfn_fetcher import lake
     except ImportError as exc:
-        raise RuntimeError(
+        raise ImportError(
             "Conversão para o lake requer o extra 'analysis'. "
             "Instale com: quantilica install pgfn --extra analysis"
         ) from exc
