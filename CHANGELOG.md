@@ -7,9 +7,6 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não lançado]
 
-### Corrigido
-- Sem o extra `analysis`, o comando `convert` termina com código 1 e a instrução de instalação (`quantilica install pgfn --extra analysis`), sem traceback.
-
 ## [0.2.0] - 2026-11-04
 
 ### Adicionado
@@ -33,6 +30,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   mais `2020-T1`. `skipped` passa a contar os membros já convertidos.
 - O catálogo para no último trimestre **fechado**: trimestres futuros (ex.: `2026-T4`
   antes da publicação) deixavam de ser agendados e de gerar 404 diário.
+- Sem o extra `analysis`, o comando `convert` termina com código 1 e a instrução de instalação (`quantilica install pgfn --extra analysis`), sem traceback.
 
 ## [0.1.0] - 2026-11-01
 
