@@ -6,9 +6,10 @@ import zipfile
 from pathlib import Path
 
 import polars as pl
+import pytest
 from quantilica.analytics.lake import check_dataset
 
-from pgfn_fetcher.lake import converter
+from pgfn_fetcher.lake import _transcode_to_utf8, converter
 
 
 def test_converter_metadata() -> None:
@@ -53,14 +54,14 @@ def test_convert_pgfn_datasets(tmp_path: Path) -> None:
     with zipfile.ZipFile(zip_sida, "w") as zf:
         zf.writestr("arquivo_lai_SIDA_1_202409.csv", csv_sida.encode("cp1252"))
 
-    # 2. Previdenciário (utf-8, region 2)
+    # 2. Previdenciário (cp1252, region 2)
     csv_prev = (
         "CPF_CNPJ;NOME_DEVEDOR;TIPO_CREDITO;VALOR_CONSOLIDADO\n"
         "98765432000188;EMPRESA XYZ;PREVIDENCIARIO;25000,00\n"
     )
     zip_prev = prev_dir / "previdenciario_2024-T3@20261101.zip"
     with zipfile.ZipFile(zip_prev, "w") as zf:
-        zf.writestr("arquivo_lai_PREV_2_202409.csv", csv_prev.encode("utf-8"))
+        zf.writestr("arquivo_lai_PREV_2_202409.csv", csv_prev.encode("cp1252"))
 
     # 3. FGTS (cp1252, region NA)
     csv_fgts = (
@@ -153,25 +154,36 @@ def test_zip_multi_membro_preserva_todas_as_linhas(tmp_path: Path) -> None:
     assert _lake_rows(ds).height == 6
 
 
-def test_membro_com_byte_invalido_vira_erro_e_nao_substitui(tmp_path: Path) -> None:
-    """Previdenciario e UTF-8: byte invalido e erro contado, nunca U+FFFD."""
+def test_previdenciario_em_cp1252_preserva_os_acentos(tmp_path: Path) -> None:
+    """Os ZIPs do previdenciario (2020-T1 a 2026-T3) vem em cp1252, nao em UTF-8."""
     raw_dir = tmp_path / "raw" / "previdenciario"
     raw_dir.mkdir(parents=True)
-    ok = "CPF_CNPJ;NOME_DEVEDOR;VALOR_CONSOLIDADO\n98765432000188;EMPRESA;1,00\n"
-    ruim = b"CPF_CNPJ;NOME_DEVEDOR;VALOR_CONSOLIDADO\n98765432000189;A\xc7\xc3O;1,00\n"
+    csv = (
+        "CPF_CNPJ;NOME_DEVEDOR;TIPO_PESSOA;SITUACAO_INSCRICAO;VALOR_CONSOLIDADO\n"
+        "98765432000188;EMPRESA A\u00c7\u00c3O LTDA;Pessoa f\u00edsica;"
+        "Em cobran\u00e7a;1,00\n"
+    )
     with zipfile.ZipFile(raw_dir / "previdenciario_2024-T3@20261101.zip", "w") as zf:
-        zf.writestr("arquivo_lai_PREV_1_202409.csv", ok.encode("utf-8"))
-        zf.writestr("arquivo_lai_PREV_2_202409.csv", ruim)
+        zf.writestr("arquivo_lai_PREV_1_202409.csv", csv.encode("cp1252"))
     lake_dir = tmp_path / "lake"
     lake_dir.mkdir()
 
     res = converter.convert(tmp_path / "raw", lake_dir)
+    assert not res.errors
     assert res.converted == 1
-    assert len(res.errors) == 1
-    assert "PREV_2" in res.errors[0]
     df = _lake_rows(lake_dir / "pgfn" / "previdenciario")
-    assert df.height == 1
-    assert df["regiao_pgfn"].to_list() == ["1"]
+    assert df["nome_devedor"].to_list() == ["EMPRESA A\u00c7\u00c3O LTDA"]
+    assert df["tipo_pessoa"].to_list() == ["Pessoa f\u00edsica"]
+    assert df["situacao_inscricao"].to_list() == ["Em cobran\u00e7a"]
+
+
+def test_transcodificacao_utf8_estrita_levanta_em_byte_invalido(tmp_path: Path) -> None:
+    """Nenhum dataset usa UTF-8 hoje, mas a transcodificacao estrita continua valendo:
+    byte invalido levanta erro, nunca vira U+FFFD."""
+    src = tmp_path / "origem.csv"
+    src.write_bytes(b"CPF_CNPJ;NOME_DEVEDOR\n98765432000189;A\xc7\xc3O\n")
+    with src.open("rb") as fh, pytest.raises(UnicodeDecodeError):
+        _transcode_to_utf8(fh, tmp_path / "destino.csv", "utf-8")
 
 
 def test_leitura_nao_carrega_o_membro_inteiro(tmp_path: Path, monkeypatch) -> None:

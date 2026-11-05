@@ -42,8 +42,9 @@ def _norm_col(col_name: str) -> str:
 logger = logging.getLogger(__name__)
 
 # Encoding declarado de cada dataset (o mesmo em todos os membros do ZIP):
-# previdenciario vem em UTF-8; sida e fgts em cp1252 (Windows-1252).
-ENCODINGS = {"sida": "cp1252", "previdenciario": "utf-8", "fgts": "cp1252"}
+# Os tres datasets vem em cp1252 (Windows-1252). O previdenciario tambem: os 27
+# ZIPs de 2020-T1 a 2026-T3 nao sao UTF-8 valido (ex.: "cobrança", "física").
+ENCODINGS = {"sida": "cp1252", "previdenciario": "cp1252", "fgts": "cp1252"}
 _CHUNK = 1 << 20
 
 

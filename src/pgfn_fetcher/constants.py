@@ -17,7 +17,7 @@ PGFN_DATASETS: dict[str, dict[str, Any]] = {
     "previdenciario": {
         "name": "Dívida Ativa Previdenciária",
         "file_kind": "Previdenciario",
-        "encoding": "utf-8",
+        "encoding": "cp1252",
         "group": "previdenciario",
     },
     "fgts": {

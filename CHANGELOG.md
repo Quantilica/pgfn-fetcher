@@ -7,6 +7,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não lançado]
 
+### Corrigido
+
+- Lake `previdenciario`: os arquivos publicados (2020-T1 a 2026-T3) estão em cp1252, não em UTF-8, e todos os membros falhavam na conversão (`'utf-8' codec can't decode byte 0xed`). O encoding declarado passa a `cp1252`, como `sida` e `fgts`. Reconverta `previdenciario` com `--force`.
+
 ## [0.2.0] - 2026-11-04
 
 ### Adicionado
