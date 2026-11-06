@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não lançado]
 
+## [0.2.2] - 2026-11-06
+
 ### Corrigido
 - `lake`: o membro de ZIP só vira CSV de dados se terminar em `.csv`; `~$*`, `md5_*`, `._*` e `__MACOSX/` são ignorados (antes bastava o nome conter `.csv`).
 
