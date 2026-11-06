@@ -80,6 +80,17 @@ def _transcode_to_utf8(source, dest: Path, encoding: str) -> None:
         out.write(decoder.decode(b"", final=True))
 
 
+def _is_data_csv(filename: str) -> bool:
+    """CSV de dados: sufixo ``.csv``, sem lixo (``~$``, ``md5_``, ``__MACOSX``)."""
+    parts = filename.replace("\\", "/").split("/")
+    base = parts[-1].lower()
+    if "__macosx" in (p.lower() for p in parts[:-1]):
+        return False
+    if base.startswith(("~$", "._", "md5_")):
+        return False
+    return base.endswith(".csv")
+
+
 def _csv_member_names(path: Path) -> list[str] | None:
     """Nomes dos CSVs do ZIP; ``None`` quando ``path`` nao e um ZIP."""
     with open(path, "rb") as f:
@@ -89,7 +100,7 @@ def _csv_member_names(path: Path) -> list[str] | None:
         return [
             i.filename
             for i in zf.infolist()
-            if not i.is_dir() and ".csv" in i.filename.lower()
+            if not i.is_dir() and _is_data_csv(i.filename)
         ]
 
 

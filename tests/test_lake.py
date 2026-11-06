@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 from quantilica.analytics.lake import check_dataset
 
-from pgfn_fetcher.lake import _transcode_to_utf8, converter
+from pgfn_fetcher.lake import _csv_member_names, _transcode_to_utf8, converter
 
 
 def test_converter_metadata() -> None:
@@ -260,3 +260,21 @@ def test_sida_2026_t3_cnpj_formatado_e_valor_com_ponto(tmp_path: Path) -> None:
     )
     assert abs(df["valor_consolidado"].sum() - 2 * (3193.82 + 137954.52)) < 1e-6
     assert "Receita da dívida ativa - PIS" in df["receita_principal"].to_list()
+
+
+def test_membros_de_zip_filtram_sufixo_e_lixo(tmp_path: Path) -> None:
+    """So `.csv` de dados entra; lixo de ZIP e `.csv.md5` ficam de fora."""
+
+    zip_path = tmp_path / "x.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for name in (
+            "dados_01.csv",
+            "SUB/Dados_02.CSV",
+            "dados_01.csv.md5",
+            "md5_dados.csv",
+            "~$dados.csv",
+            "__MACOSX/._dados_01.csv",
+            "leia-me.txt",
+        ):
+            zf.writestr(name, "a;b\n1;2\n")
+    assert _csv_member_names(zip_path) == ["dados_01.csv", "SUB/Dados_02.CSV"]
