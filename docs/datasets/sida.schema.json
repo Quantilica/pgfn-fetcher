@@ -1,0 +1,108 @@
+{
+  "fonte": "pgfn",
+  "dataset": "sida",
+  "gerado_em": "2026-11-09T14:07:30+00:00",
+  "particoes": [
+    "ano",
+    "trimestre"
+  ],
+  "colunas": [
+    {
+      "nome": "cpf_cnpj",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "tipo_pessoa",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "tipo_devedor",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "nome_devedor",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "uf_unidade_responsavel",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "unidade_responsavel",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "numero_inscricao",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "tipo_situacao_inscricao",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "situacao_inscricao",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "receita_principal",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "data_inscricao",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "indicador_ajuizado",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "valor_consolidado",
+      "tipos": [
+        "double"
+      ]
+    },
+    {
+      "nome": "regiao_pgfn",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "cnpj_basico",
+      "tipos": [
+        "large_string"
+      ]
+    },
+    {
+      "nome": "uf_devedor",
+      "tipos": [
+        "large_string"
+      ]
+    }
+  ],
+  "arquivos": 30
+}
