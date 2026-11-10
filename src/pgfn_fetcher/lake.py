@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import codecs
+import hashlib
 import logging
 import os
 import re
@@ -102,6 +103,27 @@ def _csv_member_names(path: Path) -> list[str] | None:
             for i in zf.infolist()
             if not i.is_dir() and _is_data_csv(i.filename)
         ]
+
+
+def _member_keys(
+    raw_file: Path, members: Sequence[str | None]
+) -> dict[str | None, str]:
+    """Chave de arquivo de origem por membro, sem colisao dentro do ZIP.
+
+    ``composite_file_key`` normaliza o nome (``PREV_-1`` e ``PREV_1`` dao a mesma
+    chave) e o LakeWriter grava um parquet por chave: duas chaves iguais fazem o
+    segundo membro sobrescrever o primeiro. Membros cuja chave colide ganham um
+    sufixo estavel derivado do nome exato; os demais mantem a chave de sempre.
+    """
+    keys = {m: composite_file_key(raw_file, m).lower() for m in members}
+    count: dict[str, int] = {}
+    for key in keys.values():
+        count[key] = count.get(key, 0) + 1
+    for m, key in keys.items():
+        if count[key] > 1 and m is not None:
+            digest = hashlib.sha1(m.encode("utf-8")).hexdigest()[:8]
+            keys[m] = f"{key}__{digest}"
+    return keys
 
 
 @contextmanager
@@ -280,12 +302,13 @@ class PgfnLakeConverter:
             else:
                 members = list(names)
 
+            member_keys = _member_keys(raw_file, members)
             for name in members:
                 label = name or raw_file.name
                 # Cada membro e um arquivo de origem proprio no lake: chave composta
                 # zip+membro. Com a chave so do ZIP o LakeWriter tomaria os membros
                 # seguintes por ja convertidos (mesmo sha256, mesma particao).
-                key = composite_file_key(raw_file, name).lower()
+                key = member_keys[name]
                 try:
                     if writer.is_current(
                         raw_file, partitions=partitions, file_key_name=key

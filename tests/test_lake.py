@@ -278,3 +278,35 @@ def test_membros_de_zip_filtram_sufixo_e_lixo(tmp_path: Path) -> None:
         ):
             zf.writestr(name, "a;b\n1;2\n")
     assert _csv_member_names(zip_path) == ["dados_01.csv", "SUB/Dados_02.CSV"]
+
+
+def test_zip_prev_menos1_e_prev1_nao_colidem(tmp_path: Path) -> None:
+    """PREV_-1 e PREV_1 normalizam para a mesma chave: nenhuma linha pode sumir."""
+    raw_dir = tmp_path / "raw" / "previdenciario"
+    raw_dir.mkdir(parents=True)
+    header = "CPF_CNPJ;NOME_DEVEDOR;TIPO_CREDITO;VALOR_CONSOLIDADO\n"
+    pequeno = header + "11111111000191;UNICO;PREVIDENCIARIO;1,00\n"
+    grande = header + "".join(
+        f"2222222200019{i % 10};DEVEDOR {i};PREVIDENCIARIO;{i},00\n"
+        for i in range(1, 6)
+    )
+    zip_path = raw_dir / "previdenciario_2026-T3@20261101.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("arquivo_lai_PREV_-1_202609.csv", pequeno.encode("cp1252"))
+        zf.writestr("arquivo_lai_PREV_1_202609.csv", grande.encode("cp1252"))
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert not res.errors
+    assert res.converted == 2
+
+    ds = lake_dir / "pgfn" / "previdenciario"
+    assert not check_dataset(ds)
+    assert _lake_rows(ds).height == 6
+
+    # Segunda passada: tudo ja convertido, nada reescrito.
+    res2 = converter.convert(tmp_path / "raw", lake_dir)
+    assert res2.converted == 0
+    assert res2.skipped == 2
+    assert _lake_rows(ds).height == 6
