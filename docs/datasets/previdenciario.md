@@ -106,7 +106,7 @@ A fonte não publica dicionário. As descrições abaixo vêm dos nomes das colu
 
 ## Cuidados de uso
 
-- **O lake pode perder linhas quando o ZIP tem CSVs de nome `-1`.** O ZIP de 2026-T3 traz os CSVs `PREV_-1` (1 linha) e `PREV_1` (700.720 linhas). Os dois viram o mesmo arquivo Parquet no lake, e o de uma linha sobrescreve o outro (a região 1 inteira some): o lake de 2026-T3 tem 2.696.362 linhas, e os CSVs têm 3.397.082 (conferido em 2026-11-09, versão 0.2.2). Não use o total de 2026-T3 sem conferir; nos outros trimestres examinados (2020-T1 e 2022-T4) não há CSV `-1`.
+- **Lake de 2026-T3 gerado pela versão 0.2.2 ou anterior perde linhas.** O ZIP de 2026-T3 traz os CSVs `PREV_-1` (1 linha) e `PREV_1` (700.720 linhas). Até a versão 0.2.2 os dois viravam o mesmo arquivo Parquet e o de uma linha sobrescrevia o outro (a região 1 inteira sumia): o lake tinha 2.696.362 linhas, e os CSVs têm 3.397.082 (conferido em 2026-11-09). A partir da versão 0.2.3 cada CSV do ZIP tem seu próprio arquivo. Para corrigir um lake antigo, apague `previdenciario/ano=2026/trimestre=3/` e converta de novo; só `--force` não basta, porque o arquivo antigo ficaria ao lado dos novos e duplicaria linhas.
 - **Fotografias, não fluxo.** Cada trimestre é o estoque inteiro; compare estoques entre trimestres e não some trimestres.
 - **Data de preenchimento.** `data_inscricao` vale `01/01/1000` em 7.350 linhas de 2020-T1 e 2.719 de 2026-T3, provavelmente por ausência da data; a fonte não explica.
 - **`regiao_pgfn` não é confiável como região.** Os arquivos por UF (2020-T1) recebem todos o valor `1`; desde 2022-T4 o valor é o número do CSV. Em 2026-T3 aparece o valor `-1`, que a fonte não explica.
