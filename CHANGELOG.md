@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não lançado]
 
+## [0.2.3] - 2026-11-09
+
 ### Corrigido
 - `lake` (`previdenciario`): quando o ZIP trazia os membros `PREV_-1` e `PREV_1` (caso de 2026-T3), o lake guardava só o menor e perdia as linhas da região 1 (2.696.362 linhas em vez de 3.397.082). Membros de um mesmo ZIP nunca mais compartilham o mesmo arquivo de saída. Exige reconversão de 2026-T3: apague `previdenciario/ano=2026/trimestre=3/` do lake e converta de novo (só esse trimestre é afetado; os demais não mudam de nome). Só o `--force` não basta, porque o arquivo antigo, de outra chave, ficaria ao lado dos novos e duplicaria linhas.
 
