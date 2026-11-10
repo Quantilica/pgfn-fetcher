@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from quantilica.cli.sdk import FetcherApp, make_resolve_groups
+from quantilica.core.registry import FetcherInfo
 from quantilica.core.sync import FreshnessPolicy
 
 from .catalog import GROUP_ALIASES, GROUPS, list_datasets
@@ -27,6 +28,14 @@ def path_builder(
 fetcher = FetcherApp(
     name="pgfn",
     help="Coletor e conversor Lake Hive de dados abertos da dívida ativa da PGFN",
+    info=FetcherInfo(
+        id="pgfn",
+        nome="PGFN - Dívida Ativa da União e FGTS",
+        orgao="Procuradoria-Geral da Fazenda Nacional (PGFN)",
+        homepage="https://dadosabertos.pgfn.gov.br",
+        cadencia="quarterly",
+        dominio="fiscal",
+    ),
     groups_dict=GROUPS,
     aliases_dict=GROUP_ALIASES,
     list_datasets=list_datasets,
