@@ -32,6 +32,10 @@ fetcher = FetcherApp(
         id="pgfn",
         nome="PGFN - Dívida Ativa da União e FGTS",
         orgao="Procuradoria-Geral da Fazenda Nacional (PGFN)",
+        licenca=(
+            "Sem licença declarada; dados públicos pela Lei 12.527/2011 (LAI) "
+            "e Decreto 8.777/2016"
+        ),
         homepage="https://dadosabertos.pgfn.gov.br",
         cadencia="quarterly",
         dominio="fiscal",
