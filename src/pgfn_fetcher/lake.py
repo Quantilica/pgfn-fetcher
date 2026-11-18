@@ -16,7 +16,7 @@ from pathlib import Path
 
 try:
     import polars as pl
-    from quantilica.analytics.lake import ConvertResult, LakeWriter
+    from quantilica.analytics.lake import META_FILE_KEY, ConvertResult, LakeWriter
     from quantilica.core.lake import (
         DatasetDescriptor,
         composite_file_key,
@@ -227,6 +227,57 @@ def _member_frame(
     )
 
 
+_TMP_DIRNAME = ".tmp"
+_ORIGIN_FILE = "quantilica.origin_file"
+
+
+def _indexar_origens(dataset_dir: Path) -> dict[str, list[str | None]]:
+    """``{bruto: [chave de arquivo de cada Parquet que o cita]}``, so dos rodapes.
+
+    Uma listagem de diretorios e a leitura dos rodapes do lake, nunca do bruto.
+    """
+    indice: dict[str, list[str | None]] = {}
+    if not dataset_dir.is_dir():
+        return indice
+    for parquet in sorted(dataset_dir.rglob("*.parquet")):
+        if _TMP_DIRNAME in parquet.relative_to(dataset_dir).parts:
+            continue
+        try:
+            meta = pl.read_parquet_metadata(parquet)
+        except (OSError, pl.exceptions.PolarsError):
+            continue
+        if nome := meta.get(_ORIGIN_FILE):
+            indice.setdefault(nome, []).append(meta.get(META_FILE_KEY))
+    return indice
+
+
+def _membros_em_dia(
+    writer: LakeWriter,
+    raw_file: Path,
+    partitions: dict[str, int],
+    registros: list[str | None] | None,
+) -> int | None:
+    """Quantos membros do bruto ja estao em dia no lake, sem abrir o bruto.
+
+    Os nomes dos membros so se conhecem abrindo o ZIP, mas as chaves que o
+    conversor gravou estao nos rodapes: cada chave registrada para este bruto (a
+    do bruto, ou ``<bruto>__<membro>``) e conferida com ``is_current`` na particao
+    do periodo do nome, o mesmo teste que o laco faz membro a membro (sha256 do
+    sidecar, versao do layout, partes completas). Devolve ``None`` quando nao ha
+    registro ou algum esta desatualizado: o bruto e aberto e convertido como antes.
+    """
+    if writer.force or not registros:
+        return None
+    base = composite_file_key(raw_file).lower()
+    chaves = set(registros)
+    for chave in chaves:
+        if chave is None or not (chave == base or chave.startswith(f"{base}__")):
+            return None
+        if not writer.is_current(raw_file, partitions=partitions, file_key_name=chave):
+            return None
+    return len(registros)
+
+
 class PgfnLakeConverter:
     """Converts PGFN Dívida Ativa open data ZIPs into Universal Hive Parquet Lake."""
 
@@ -274,6 +325,9 @@ class PgfnLakeConverter:
         all_raw_files = [f for f in input_path.rglob("*") if f.is_file()]
         active_files = select_current(all_raw_files)
 
+        # Rodapes do lake por bruto de origem, por dataset (lidos sob demanda).
+        origens: dict[str, dict[str, list[str | None]]] = {}
+
         for raw_file in active_files:
             ds_id = _match_pgfn_dataset(raw_file.name)
             if ds_id not in writers:
@@ -286,9 +340,24 @@ class PgfnLakeConverter:
                     f"PGFN {raw_file.name}: nao foi possivel inferir ano/trimestre"
                 )
                 continue
+            if raw_file.name.endswith(".manifest.json"):
+                continue  # sidecar: nunca e dado
             ano, trimestre = period
             partitions = {"ano": ano, "trimestre": trimestre}
             enc = ENCODINGS[ds_id]
+
+            # Em dia no lake: o bruto igual ao registrado nos rodapes e pulado antes
+            # de abrir o ZIP (o bruto pode estar numa montagem lenta); a contagem de
+            # ``skipped`` e a de membros que o laco abaixo contaria.
+            if not force:
+                if ds_id not in origens:
+                    origens[ds_id] = _indexar_origens(writer.dataset_dir)
+                em_dia = _membros_em_dia(
+                    writer, raw_file, partitions, origens[ds_id].get(raw_file.name)
+                )
+                if em_dia is not None:
+                    res.skipped += em_dia
+                    continue
 
             try:
                 names = _csv_member_names(raw_file)

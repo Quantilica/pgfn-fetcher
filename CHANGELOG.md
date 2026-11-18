@@ -14,6 +14,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - CI e infraestrutura alinhados ao template (fetcher-template v0.2.1).
 
 ### Corrigido
+- `lake`: o build sem mudança não abre mais o ZIP do bruto. Antes de abri-lo, confere pelos rodapés do lake (chaves registradas para o bruto, cada uma testada com `LakeWriter.is_current` na partição do período do nome) se ele já está em dia e, estando, só conta `skipped`. Os sidecars deixam de ser abertos. Mesma contagem de `converted`/`skipped`/`errors`; `force` e bruto novo seguem convertendo.
 - CI: o pyproject declara o PyPI antes do índice Quantilica (`[[tool.uv.index]]`), e o workflow perde `--index` e `--index-strategy`. Com a estratégia padrão `first-index`, o `uv sync` só consulta o índice para o que não está no PyPI (`quantilica-analytics`) e deixa de receber o 503 intermitente que o GitHub Pages devolve a caminhos inexistentes.
 
 ## [0.3.0] - 2026-11-14
