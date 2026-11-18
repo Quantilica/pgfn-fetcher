@@ -354,3 +354,46 @@ def test_membro_com_linha_em_branco_depois_do_cabecalho_tambem_pula(
     r2 = converter.convert(raw, lake, datasets=["sida"])
     assert (r2.converted, r2.skipped, r2.errors) == (0, 2, [])
     assert leituras == []
+
+
+def test_precheagem_que_levanta_segue_o_caminho_completo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Sidecar nao confiavel (ausente) e bruto ilegivel: o hash levanta na
+    # pre-checagem; o build nao pode cair, e o resultado e o do caminho completo.
+    raw, lake = _bruto(tmp_path), tmp_path / "lake"
+    for sidecar in raw.rglob("*.manifest.json"):
+        sidecar.unlink()
+
+    def ilegivel(*_a: object, **_k: object) -> str:
+        raise OSError("Input/output error")
+
+    monkeypatch.setattr(manifests_mod, "sha256_file", ilegivel)
+    r = converter.convert(raw, lake, datasets=["sida"])
+    # Mesmas mensagens e contagens do caminho completo: um erro por membro do ZIP.
+    assert (r.converted, r.skipped) == (0, 0)
+    assert len(r.errors) == 3
+    assert all(
+        e.startswith("Erro ao converter PGFN arquivo_lai_SIDA_")
+        and "em sida_2024-T3@20261101.zip" in e
+        and "Input/output error" in e
+        for e in r.errors
+    )
+
+
+def test_precheagem_que_levanta_com_lake_ja_gravado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw, lake = _bruto(tmp_path), tmp_path / "lake"
+    converter.convert(raw, lake, datasets=["sida"])
+    for sidecar in raw.rglob("*.manifest.json"):
+        sidecar.unlink()
+
+    def ilegivel(*_a: object, **_k: object) -> str:
+        raise OSError("Input/output error")
+
+    monkeypatch.setattr(manifests_mod, "sha256_file", ilegivel)
+    r = converter.convert(raw, lake, datasets=["sida"])
+    assert (r.converted, r.skipped) == (0, 0)
+    assert len(r.errors) == 3
+    assert all("Input/output error" in e for e in r.errors)

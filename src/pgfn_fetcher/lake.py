@@ -348,7 +348,15 @@ class PgfnLakeConverter:
             # sha256 atual, e pulado antes de abrir o ZIP (o bruto pode estar numa
             # montagem lenta); ``skipped`` e o numero de saidas, as que o laco
             # abaixo contaria.
-            em_dia = _saidas_em_dia(writer, raw_file, partitions)
+            try:
+                em_dia = _saidas_em_dia(writer, raw_file, partitions)
+            except Exception as exc:  # noqa: BLE001 - na duvida, converte como antes
+                # Sidecar nao confiavel e bruto ilegivel: o hash levanta. A pre-checagem
+                # e so otimizacao; o caminho completo registra o erro como sempre.
+                logger.warning(
+                    "%s: pre-checagem do lake falhou (%s)", raw_file.name, exc
+                )
+                em_dia = None
             if em_dia is not None:
                 res.skipped += em_dia
                 continue
