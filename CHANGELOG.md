@@ -14,7 +14,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - CI e infraestrutura alinhados ao template (fetcher-template v0.2.1).
 
 ### Corrigido
-- `lake`: o build sem mudança não abre mais o ZIP do bruto. Antes de abri-lo, confere pelos rodapés do lake (chaves registradas para o bruto, cada uma testada com `LakeWriter.is_current` na partição do período do nome) se ele já está em dia e, estando, só conta `skipped`. Os sidecars deixam de ser abertos. Mesma contagem de `converted`/`skipped`/`errors`; `force` e bruto novo seguem convertendo.
+- `lake`: o build sem mudança não abre mais o ZIP do bruto. A conversão declara ao lake, antes da primeira gravação, todas as saídas do bruto (`origin_outputs`: uma por membro CSV com dados) e o build só pula o bruto quando `LakeWriter.origin_complete` confirma, pelos rodapés e pelo sidecar, que todas existem com o sha256 atual (e que a partição do nome não mudou); `skipped` conta as saídas. Uma conversão interrompida ou um membro que falhou deixa de virar pulo permanente: o bruto é reaberto e só o que falta é gravado; erros determinísticos de membro seguem aparecendo a cada build. Lake gravado sem a declaração (inclusive o anterior à colisão `PREV_-1`/`PREV_1`) reconverte uma vez. Mesma contagem de `converted`/`skipped`/`errors`; `force` e bruto novo seguem convertendo. Exige `quantilica-analytics>=0.15.0`.
 - CI: o pyproject declara o PyPI antes do índice Quantilica (`[[tool.uv.index]]`), e o workflow perde `--index` e `--index-strategy`. Com a estratégia padrão `first-index`, o `uv sync` só consulta o índice para o que não está no PyPI (`quantilica-analytics`) e deixa de receber o 503 intermitente que o GitHub Pages devolve a caminhos inexistentes.
 
 ## [0.3.0] - 2026-11-14
