@@ -14,6 +14,7 @@ from .client import PgfnClient
 from .constants import PGFN_BASE_URL, PGFN_DATASETS, PGFN_START_YEAR
 
 __all__ = [
+    "DiscoveryFailure",
     "DiscoveryReport",
     "classify_zip",
     "discover_entries",
@@ -21,6 +22,8 @@ __all__ = [
     "GroupInfo",
     "GROUPS",
     "GROUP_ALIASES",
+    "group_failures",
+    "last_discovery",
     "list_datasets",
 ]
 
@@ -73,6 +76,18 @@ def classify_zip(filename: str) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class DiscoveryFailure:
+    """Um (dataset, trimestre) que a descoberta não conseguiu resolver."""
+
+    dataset: str
+    #: diretório do trimestre (``2026_trimestre_03``).
+    item: str
+    url: str
+    error: str
+    error_class: str = "ArquivoAusente"
+
+
 @dataclass
 class DiscoveryReport:
     """Resultado da descoberta: entradas, erros contados e uso de fallback."""
@@ -84,7 +99,13 @@ class DiscoveryReport:
     fallback_trimesters: list[str] = field(default_factory=list)
     #: trimestres com mais de um arquivo para o mesmo dataset (ambíguo, usa o 1º).
     ambiguous: list[tuple[str, str]] = field(default_factory=list)
+    #: (dataset, trimestre) ambíguo -> arquivos candidatos, em ordem alfabética.
+    ambiguous_files: dict[tuple[str, str], list[str]] = field(default_factory=dict)
     root_failed: bool = False
+    #: causa da falha da raiz (exceção ou listagem sem diretório de trimestre).
+    root_error: str | None = None
+    #: um por item de ``missing``, com a causa (falha de descoberta do dataset).
+    failures: list[DiscoveryFailure] = field(default_factory=list)
 
     @property
     def errors(self) -> int:
@@ -125,20 +146,34 @@ def discover_entries(
     - Para cada trimestre, os nomes reais vêm da listagem do diretório. Se a
       listagem do trimestre falhar, usa o nome fixo (``fallback_trimesters``).
     - Dataset esperado sem arquivo na listagem **não** vira entrada (evita 404
-      diário) e é contado em ``missing``.
+      diário), é contado em ``missing`` e registrado em ``failures`` (o plugin o
+      leva ao ``check`` e ao ``sync`` como falha de descoberta).
+    - Raiz que falha (``root_failed``) segue com o catálogo aritmético, mas a causa
+      fica em ``root_error`` e no log (WARNING). O mesmo para ``ambiguous`` e
+      ``fallback_trimesters``: o resumo vai ao log, nada some em silêncio.
     """
     log = logger or logging.getLogger(__name__)
     client = client or PgfnClient()
     report = DiscoveryReport(entries={ds: [] for ds in PGFN_DATASETS})
-    trimesters = [t for t in client.discover_trimesters() if _TRIMESTER_RE.match(t)]
+    try:
+        found_dirs = client.discover_trimesters()
+    except Exception as exc:  # noqa: BLE001 - a causa vai para o relatório e o log
+        found_dirs = []
+        report.root_error = f"{type(exc).__name__}: {exc}"
+    trimesters = [t for t in found_dirs if _TRIMESTER_RE.match(t)]
     trimesters = [t for t in trimesters if int(t[:4]) >= PGFN_START_YEAR]
     if not trimesters:
-        log.warning("PGFN: listagem da raiz vazia/indisponível; usando fallback")
         report.root_failed = True
+        if report.root_error is None:
+            report.root_error = (
+                "a listagem da raiz não traz nenhum diretório de trimestre "
+                f"(a partir de {PGFN_START_YEAR})"
+            )
         report.entries = {
             ds: _build_quarterly_entries_for_dataset(ds, meta)
             for ds, meta in PGFN_DATASETS.items()
         }
+        _log_summary(report, log)
         return report
     for tri in trimesters:
         m = _TRIMESTER_RE.match(tri)
@@ -162,14 +197,60 @@ def discover_entries(
         for ds, meta in PGFN_DATASETS.items():
             found = by_ds.get(ds)
             if not found:
-                log.warning("PGFN: %s sem arquivo de %s em %s", ds, tri, files)
                 report.missing.append((ds, tri))
+                report.failures.append(
+                    DiscoveryFailure(
+                        dataset=ds,
+                        item=tri,
+                        url=f"{PGFN_BASE_URL}/{tri}/",
+                        error=(
+                            f"nenhum arquivo do dataset {ds} em {tri} "
+                            f"(publicados: {', '.join(files) or 'nenhum .zip'})"
+                        ),
+                    )
+                )
                 continue
+            chosen = sorted(found)[0]
             if len(found) > 1:
-                log.warning("PGFN: %s ambíguo em %s: %s", ds, tri, found)
                 report.ambiguous.append((ds, tri))
-            report.entries[ds].append(_entry(ds, meta, year, quarter, sorted(found)[0]))
+                report.ambiguous_files[(ds, tri)] = sorted(found)
+            report.entries[ds].append(_entry(ds, meta, year, quarter, chosen))
+    _log_summary(report, log)
     return report
+
+
+def _log_summary(report: DiscoveryReport, log: logging.Logger) -> None:
+    """Uma linha de WARNING por tipo de problema, com os itens (nada some)."""
+    if report.root_failed:
+        log.warning(
+            "PGFN: listagem da raiz sem resultado (%s); usando o catálogo "
+            "aritmético de reserva (nomes fixos, sem conferir o que a fonte "
+            "publica): um arquivo renomeado só aparece como 404 no download",
+            report.root_error,
+        )
+    if report.fallback_trimesters:
+        log.warning(
+            "PGFN: %d trimestre(s) sem listagem, com nome fixo: %s",
+            len(report.fallback_trimesters),
+            ", ".join(report.fallback_trimesters),
+        )
+    if report.missing:
+        log.warning(
+            "PGFN: %d dataset(s) esperado(s) sem arquivo na listagem do "
+            "trimestre (falha de descoberta, fora do catálogo): %s",
+            len(report.missing),
+            "; ".join(f"{ds} em {tri}" for ds, tri in report.missing),
+        )
+    if report.ambiguous:
+        log.warning(
+            "PGFN: %d dataset(s) com mais de um arquivo no trimestre; usa o "
+            "primeiro em ordem alfabética: %s",
+            len(report.ambiguous),
+            "; ".join(
+                f"{ds} em {tri}: {', '.join(report.ambiguous_files[(ds, tri)])}"
+                for ds, tri in report.ambiguous
+            ),
+        )
 
 
 _REPORT: DiscoveryReport | None = None
@@ -184,6 +265,14 @@ def refresh_discovery(client: PgfnClient | None = None) -> DiscoveryReport:
 
 def last_discovery() -> DiscoveryReport | None:
     return _REPORT
+
+
+def group_failures(group: str) -> list[DiscoveryFailure]:
+    """Falhas de descoberta do dataset (``missing``) da última listagem."""
+    canon = GROUP_ALIASES.get(group, group)
+    if _REPORT is None:
+        return []
+    return [f for f in _REPORT.failures if f.dataset == canon]
 
 
 def _discovery_enabled() -> bool:

@@ -5,6 +5,26 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+
+- `catalog`: `DiscoveryFailure`, `DiscoveryReport.failures`/`ambiguous_files`/`root_error` e `group_failures(dataset)`.
+- `lake`: `DATASET_DESCONHECIDO`, valor que `_match_pgfn_dataset` devolve para nome que não casa com dataset.
+
+### Corrigido
+
+- `catalog`/`plugin`: trimestre cujo ZIP de um dataset some da listagem (nome trocado) deixa de sair do catálogo em silêncio. O `DiscoveryReport` já contava `missing`, mas ninguém o lia: agora é falha de descoberta. No `sync`, cada falha é um erro `descoberta:<dataset>:<trimestre>` no resultado e no `--summary-json` (saída 3 se algo baixou, 1 se nada baixou; os demais trimestres seguem). No `check`, vira um item `skip-unavailable` com motivo `listing-error` (causa em `entry["error"]` e `entry["error_class"]`), o `check` sai 0 e grava o plano dos demais; o `sync --from-plan` (`quantilica-cli` 0.30.1) conta o item como erro. Só o `check` tolera; os avisos em WARNING listam os itens.
+- `catalog`: dataset com mais de um arquivo no trimestre agora avisa em WARNING quais são os arquivos e que usa o primeiro em ordem alfabética.
+- `catalog`/`client`: `discover_trimesters` não engole mais a exceção da raiz (devolvia `[]`, igual a "sem trimestres"). A descoberta registra a causa (`root_error`) e avisa em WARNING que usa o catálogo aritmético de reserva, que não confere o que a fonte publica (arquivo renomeado só aparece como 404 no download). Trimestres sem listagem (nome fixo) também entram num aviso único. O catálogo de reserva continua sendo usado.
+- `client`: `PgfnClient.download_file` chamava `download_with_manifest` com `manifest_path=` e sem `source_id`, `dataset_id` e `producer` (`TypeError` em qualquer chamada real; o teste mockava o método do core). Agora recebe `dataset_id` (obrigatório), `source_id="pgfn"`, `producer="pgfn-fetcher"`, `force` e `expected_format` (por padrão, o da extensão do destino, de modo que página de erro com HTTP 200 não vira arquivo) e devolve o `Path` baixado, como o core, em vez de um manifesto. Testada com o `download_with_manifest` real sobre transporte simulado. Nada no monorepo a chamava.
+- `client`: o cliente da descoberta deixa de ser um `HttpClient` próprio e passa a ser o cliente padrão do host, que respeita `QUANTILICA_HTTP_*`, `QUANTILICA_SSL_VERIFY` e o bundle de CA. Sem o host instalado, cai num cliente do core com a verificação TLS lida do ambiente.
+- `lake`: `_match_pgfn_dataset` devolvia `sida` para qualquer nome desconhecido, e o conversor gravava esse bruto no dataset errado. Agora devolve `desconhecido` e o `convert` registra um erro (`ConvertResult.errors`, o host sai 1) e um log ERROR com o nome, sem converter o arquivo. O sidecar `.manifest.json` é ignorado antes da classificação. O nome `*Nao_Previdenciario*` também deixa de cair em `previdenciario` (a checagem do SIDA passa a vir antes).
+
+### Alterado
+
+- Dependência de desenvolvimento: `quantilica-cli>=0.30.1`.
+
 ## [0.3.1] - 2026-11-19
 
 ### Adicionado

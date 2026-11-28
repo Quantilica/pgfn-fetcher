@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
 
 from pgfn_fetcher import catalog
 from pgfn_fetcher.catalog import classify_zip, discover_entries
-from pgfn_fetcher.client import parse_zip_links
+from pgfn_fetcher.client import PgfnClient, parse_zip_links
 
 FIX = Path(__file__).parent / "fixtures" / "listagens"
 
@@ -105,7 +106,74 @@ def test_arquivo_esperado_ausente_e_erro_contado() -> None:
 def test_raiz_indisponivel_cai_no_catalogo_aritmetico() -> None:
     rep = discover_entries(_client({"raiz"}))
     assert rep.root_failed and rep.errors == 1
+    assert "RuntimeError" in (rep.root_error or "")
     assert rep.entries["sida"][0].id == "sida_2020-T1"
+
+
+def test_raiz_indisponivel_avisa_a_causa(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        discover_entries(_client({"raiz"}))
+    msgs = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("catálogo aritmético" in m and "RuntimeError" in m for m in msgs)
+
+
+def test_raiz_sem_diretorios_tambem_e_falha_com_causa() -> None:
+    pages = _pages()
+    pages["raiz"] = "<html><body>em manutenção</body></html>"
+    rep = discover_entries(PgfnClient(client=FakeHttp(pages)))  # type: ignore[arg-type]
+    assert rep.root_failed
+    assert "nenhum diretório de trimestre" in (rep.root_error or "")
+
+
+def test_arquivo_ausente_vira_falha_de_descoberta_e_aviso(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    pages = _pages()
+    pages["2026_trimestre_03"] = pages["2026_trimestre_03"].replace(
+        "Dados_abertos_FGTS.zip", "FGTS_novo.txt"
+    )
+    with caplog.at_level(logging.WARNING):
+        rep = discover_entries(PgfnClient(client=FakeHttp(pages)))  # type: ignore[arg-type]
+    (falha,) = rep.failures
+    assert (falha.dataset, falha.item) == ("fgts", "2026_trimestre_03")
+    assert falha.url.endswith("/2026_trimestre_03/")
+    assert "Dados_abertos_Previdenciario.zip" in falha.error
+    msgs = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any(
+        "fgts em 2026_trimestre_03" in m and "falha de descoberta" in m for m in msgs
+    )
+
+
+def test_dois_arquivos_para_o_mesmo_dataset_avisa_quais_e_qual_usou(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    pages = _pages()
+    pages["2026_trimestre_03"] = pages["2026_trimestre_03"].replace(
+        'href="Dados_abertos_FGTS.zip"',
+        'href="Dados_abertos_FGTS.zip">a</a><a href="Dados_abertos_FGTS_v2.zip"',
+    )
+    with caplog.at_level(logging.WARNING):
+        rep = discover_entries(PgfnClient(client=FakeHttp(pages)))  # type: ignore[arg-type]
+    assert rep.ambiguous == [("fgts", "2026_trimestre_03")]
+    assert rep.ambiguous_files[("fgts", "2026_trimestre_03")] == [
+        "Dados_abertos_FGTS.zip",
+        "Dados_abertos_FGTS_v2.zip",
+    ]
+    assert rep.failures == []  # ambíguo só avisa: o primeiro segue no catálogo
+    fgts = {e.id: e for e in rep.entries["fgts"]}
+    assert fgts["fgts_2026-T3"].url.endswith("/Dados_abertos_FGTS.zip")
+    msgs = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("Dados_abertos_FGTS_v2.zip" in m and "primeiro" in m for m in msgs)
+
+
+def test_trimestres_sem_listagem_entram_no_aviso(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        rep = discover_entries(_client())
+    assert "2020_trimestre_01" in rep.fallback_trimesters
+    msgs = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("sem listagem" in m and "2020_trimestre_01" in m for m in msgs)
 
 
 def test_list_datasets_serve_descoberta(monkeypatch: pytest.MonkeyPatch) -> None:
