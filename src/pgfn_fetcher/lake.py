@@ -166,16 +166,25 @@ def _extract_region(member_name: str) -> str:
     return "1"
 
 
+#: Valor de ``_match_pgfn_dataset`` para o nome que não casa com nenhum dataset.
+DATASET_DESCONHECIDO = "desconhecido"
+
+
 def _match_pgfn_dataset(filename: str) -> str:
-    """Identify which PGFN dataset a file belongs to."""
+    """Identify which PGFN dataset a file belongs to.
+
+    Devolve ``DATASET_DESCONHECIDO`` para o nome que não casa com nenhum dataset
+    (nunca chuta ``sida``): quem chama registra o erro.
+    """
     s = filename.lower()
+    # "nao_previdenciario" contém "previdenciario": o SIDA vem antes.
+    if "sida" in s or "nao_previdenciario" in s or "nao-previdenciario" in s:
+        return "sida"
     if "previdenciario" in s:
         return "previdenciario"
     if "fgts" in s:
         return "fgts"
-    if "sida" in s or "nao_previdenciario" in s or "nao-previdenciario" in s:
-        return "sida"
-    return "sida"
+    return DATASET_DESCONHECIDO
 
 
 def _member_frame(
@@ -327,7 +336,20 @@ class PgfnLakeConverter:
         active_files = select_current(all_raw_files)
 
         for raw_file in active_files:
+            if raw_file.name.endswith(".manifest.json"):
+                continue  # sidecar: nunca e dado
             ds_id = _match_pgfn_dataset(raw_file.name)
+            if ds_id == DATASET_DESCONHECIDO:
+                logger.error(
+                    "PGFN %s: nome nao pertence a nenhum dataset conhecido (%s)",
+                    raw_file.name,
+                    ", ".join(DATASETS),
+                )
+                res.errors.append(
+                    f"PGFN {raw_file.name}: arquivo de dataset desconhecido "
+                    f"(esperado um de: {', '.join(DATASETS)})"
+                )
+                continue
             if ds_id not in writers:
                 continue
 
@@ -338,8 +360,6 @@ class PgfnLakeConverter:
                     f"PGFN {raw_file.name}: nao foi possivel inferir ano/trimestre"
                 )
                 continue
-            if raw_file.name.endswith(".manifest.json"):
-                continue  # sidecar: nunca e dado
             ano, trimestre = period
             partitions = {"ano": ano, "trimestre": trimestre}
             enc = ENCODINGS[ds_id]

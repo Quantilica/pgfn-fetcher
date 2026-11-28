@@ -310,3 +310,32 @@ def test_zip_prev_menos1_e_prev1_nao_colidem(tmp_path: Path) -> None:
     assert res2.converted == 0
     assert res2.skipped == 2
     assert _lake_rows(ds).height == 6
+
+
+def test_match_pgfn_dataset_desconhecido_nao_vira_sida() -> None:
+    from pgfn_fetcher.lake import DATASET_DESCONHECIDO, _match_pgfn_dataset
+
+    assert _match_pgfn_dataset("sida_2026-T03@20261101.zip") == "sida"
+    assert _match_pgfn_dataset("Dados_abertos_Nao_Previdenciario.zip") == "sida"
+    assert _match_pgfn_dataset("fgts_2026-T03@20261101.zip") == "fgts"
+    assert _match_pgfn_dataset("outro_2026-T03@20261101.zip") == DATASET_DESCONHECIDO
+
+
+def test_bruto_de_dataset_desconhecido_e_erro_e_nao_vai_para_o_sida(
+    tmp_path: Path,
+) -> None:
+    raw_dir = tmp_path / "raw" / "outro"
+    raw_dir.mkdir(parents=True)
+    with zipfile.ZipFile(raw_dir / "outro_2026-T03@20261101.zip", "w") as zf:
+        zf.writestr("arquivo_lai_X_1_202609.csv", b"CPF_CNPJ;VALOR_CONSOLIDADO\n1;2\n")
+    # o sidecar do bruto desconhecido não gera um segundo erro
+    (raw_dir / "outro_2026-T03@20261101.zip.manifest.json").write_text("{}")
+    lake_dir = tmp_path / "lake"
+    lake_dir.mkdir()
+
+    res = converter.convert(tmp_path / "raw", lake_dir)
+    assert res.converted == 0
+    assert len(res.errors) == 1
+    assert "outro_2026-T03@20261101.zip" in res.errors[0]
+    assert "desconhecido" in res.errors[0]
+    assert not list(lake_dir.rglob("*.parquet"))
